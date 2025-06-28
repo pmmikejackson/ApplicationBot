@@ -5,7 +5,9 @@ from app.core.celery import celery_app
 from app.services.scraper_service import ScraperService
 from app.services.communication_service import CommunicationService
 from app.services.job_matching_service import JobMatchingService
+from app.services.email_parser_service import EmailJobParserService
 from app.automation.application_automator import ApplicationAutomator
+from app.core.config import settings
 from app.models.job import Job, JobStatus, JobPriority
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User
@@ -61,6 +63,102 @@ def scrape_jobs_task(self, user_id: int = None):
         raise self.retry(exc=e, countdown=300, max_retries=3)
     finally:
         db.close()
+
+@celery_app.task(bind=True)
+def process_job_emails_task(self):
+    """Background task to process job emails automatically"""
+    
+    if not settings.EMAIL_PARSING_ENABLED:
+        logger.info("Email parsing is disabled in settings")
+        return {"status": "disabled"}
+    
+    if not all([settings.IMAP_SERVER, settings.IMAP_USER, settings.IMAP_PASSWORD]):
+        logger.error("Email configuration incomplete")
+        return {"status": "error", "message": "Email configuration incomplete"}
+    
+    try:
+        parser = EmailJobParserService()
+        
+        # Connect to email server
+        connected = parser.connect_to_email(
+            settings.IMAP_SERVER,
+            settings.IMAP_USER, 
+            settings.IMAP_PASSWORD
+        )
+        
+        if not connected:
+            logger.error("Failed to connect to email server")
+            return {"status": "error", "message": "Failed to connect to email server"}
+        
+        # Fetch and parse job emails (last 24 hours)
+        jobs = parser.fetch_job_emails(days_back=1)
+        parser.close_connection()
+        
+        if not jobs:
+            logger.info("No new job emails found")
+            return {"status": "success", "jobs_found": 0, "jobs_saved": 0}
+        
+        # For now, just store in mock data (later integrate with database)
+        from app.main import mock_data_store
+        jobs_saved = 0
+        
+        for job_data in jobs:
+            try:
+                # Generate new ID
+                new_id = max(mock_data_store["jobs"].keys(), default=0) + 1
+                
+                # Convert to mock data format
+                mock_job = {
+                    "id": new_id,
+                    "title": job_data.get("title", "Unknown Position"),
+                    "company": job_data.get("company", "Unknown Company"),
+                    "location": job_data.get("location", "Location not specified"),
+                    "salary_min": job_data.get("salary_min"),
+                    "salary_max": job_data.get("salary_max"),
+                    "platform": job_data.get("platform", "email").value if hasattr(job_data.get("platform"), 'value') else str(job_data.get("platform", "email")).lower(),
+                    "status": "discovered",
+                    "priority": job_data.get("priority", "good_fit").value if hasattr(job_data.get("priority"), 'value') else str(job_data.get("priority", "good_fit")).lower(),
+                    "fit_score": job_data.get("fit_score", 7.0),
+                    "posted_date": job_data.get("posted_date", datetime.now()).isoformat() if hasattr(job_data.get("posted_date"), 'isoformat') else str(job_data.get("posted_date", datetime.now())),
+                    "discovered_at": datetime.now().isoformat(),
+                    "is_remote": job_data.get("is_remote", False),
+                    "application_url": job_data.get("application_url", ""),
+                    "source": "email"
+                }
+                
+                # Check for duplicates by title and company
+                duplicate = False
+                for existing_job in mock_data_store["jobs"].values():
+                    if (existing_job["title"].lower() == mock_job["title"].lower() and 
+                        existing_job["company"].lower() == mock_job["company"].lower()):
+                        duplicate = True
+                        break
+                
+                if not duplicate:
+                    mock_data_store["jobs"][new_id] = mock_job
+                    jobs_saved += 1
+                    logger.info(f"Saved job from email: {mock_job['title']} at {mock_job['company']}")
+                else:
+                    logger.info(f"Skipped duplicate job: {mock_job['title']} at {mock_job['company']}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to process job email: {e}")
+                continue
+        
+        result = {
+            "status": "success",
+            "jobs_found": len(jobs),
+            "jobs_saved": jobs_saved,
+            "duplicates_skipped": len(jobs) - jobs_saved,
+            "processed_at": datetime.now().isoformat()
+        }
+        
+        logger.info(f"Email processing completed: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Email processing task failed: {e}")
+        return {"status": "error", "message": str(e)}
 
 @celery_app.task(bind=True)
 def update_job_scores_task(self, user_id: int):

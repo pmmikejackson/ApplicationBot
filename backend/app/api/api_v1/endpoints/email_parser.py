@@ -68,6 +68,16 @@ async def parse_job_emails(request: EmailParseRequest):
 async def test_email_configuration():
     """Test email configuration from environment variables"""
     
+    # Try to get last processing status from Celery
+    last_check = None
+    try:
+        from app.tasks import process_job_emails_task
+        # In a real implementation, you'd check Redis for last task result
+        # For now, we'll use a placeholder
+        last_check = None
+    except:
+        pass
+    
     config_status = {
         "imap_server_configured": bool(settings.IMAP_SERVER),
         "imap_user_configured": bool(settings.IMAP_USER),
@@ -79,19 +89,22 @@ async def test_email_configuration():
     all_configured = all([
         settings.IMAP_SERVER,
         settings.IMAP_USER,
-        settings.IMAP_PASSWORD
+        settings.IMAP_PASSWORD,
+        settings.EMAIL_PARSING_ENABLED
     ])
     
     return {
         "configured": all_configured,
-        "status": "Ready for email parsing" if all_configured else "Missing configuration",
+        "status": "Automatic email processing active" if all_configured else "Configuration required",
+        "last_check": last_check,
         "config": config_status,
+        "processing_frequency": "Every 15 minutes" if all_configured else None,
         "next_steps": [
             "Set IMAP_SERVER in .env (e.g., imap.gmail.com)",
             "Set IMAP_USER in .env (your email address)",
             "Set IMAP_PASSWORD in .env (app password for Gmail)",
             "Set EMAIL_PARSING_ENABLED=true in .env"
-        ] if not all_configured else ["Email parsing is ready to use"]
+        ] if not all_configured else ["Email processing is automatic - check dashboard for latest jobs"]
     }
 
 @router.post("/parse-emails-from-config")

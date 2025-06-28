@@ -15,9 +15,7 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<JobStats | null>(null);
   const [scrapingStatus, setScrapingStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [scraping, setScraping] = useState(false);
-  const [parsingEmails, setParsingEmails] = useState(false);
-  const [emailConfig, setEmailConfig] = useState<any>(null);
+  const [emailStatus, setEmailStatus] = useState<any>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -29,11 +27,11 @@ export const Dashboard: React.FC = () => {
       const [jobStats, scrapingData, emailConfigData] = await Promise.all([
         jobsApi.getJobStats(),
         scrapersApi.getScrapingStatus(),
-        emailParserApi.testEmailConfig().catch(() => ({ configured: false }))
+        emailParserApi.testEmailConfig().catch(() => ({ configured: false, last_check: null }))
       ]);
       setStats(jobStats);
       setScrapingStatus(scrapingData);
-      setEmailConfig(emailConfigData);
+      setEmailStatus(emailConfigData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -41,37 +39,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleStartScraping = async () => {
-    try {
-      setScraping(true);
-      await scrapersApi.scrapeJobs({
-        keywords: ['Director of Product Management', 'Senior Product Manager', 'VP Product'],
-        location: 'Remote',
-        remote_only: true,
-        senior_level: true,
-      });
-      // Reload data after scraping
-      setTimeout(loadDashboardData, 2000);
-    } catch (error) {
-      console.error('Scraping failed:', error);
-    } finally {
-      setScraping(false);
-    }
-  };
-
-  const handleParseEmails = async () => {
-    try {
-      setParsingEmails(true);
-      const result = await emailParserApi.parseEmailsFromConfig(7);
-      console.log('Email parsing result:', result);
-      // Reload data after parsing
-      setTimeout(loadDashboardData, 2000);
-    } catch (error) {
-      console.error('Email parsing failed:', error);
-    } finally {
-      setParsingEmails(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -132,26 +99,21 @@ export const Dashboard: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600">Overview of your job application automation</p>
+          <p className="text-gray-600">Automated job discovery and application tracking</p>
         </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={handleParseEmails}
-            disabled={parsingEmails || !emailConfig?.configured}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-            title={!emailConfig?.configured ? 'Email parsing not configured' : 'Parse job emails from inbox'}
-          >
-            <ArrowPathIcon className={`h-4 w-4 ${parsingEmails ? 'animate-spin' : ''}`} />
-            <span>{parsingEmails ? 'Parsing...' : 'Parse Emails'}</span>
-          </button>
-          <button
-            onClick={handleStartScraping}
-            disabled={scraping}
-            className="bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-          >
-            <ArrowPathIcon className={`h-4 w-4 ${scraping ? 'animate-spin' : ''}`} />
-            <span>{scraping ? 'Scraping...' : 'Start Job Search'}</span>
-          </button>
+        <div className="text-right">
+          <div className="text-sm text-gray-500">
+            Email Processing: {emailStatus?.configured ? (
+              <span className="text-green-600 font-medium">Active</span>
+            ) : (
+              <span className="text-amber-600 font-medium">Setup Required</span>
+            )}
+          </div>
+          {emailStatus?.last_check && (
+            <div className="text-xs text-gray-400">
+              Last checked: {new Date(emailStatus.last_check).toLocaleTimeString()}
+            </div>
+          )}
         </div>
       </div>
 

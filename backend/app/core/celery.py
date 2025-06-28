@@ -27,9 +27,9 @@ celery_app.conf.update(
     
     # Beat schedule for periodic tasks
     beat_schedule={
-        "scrape-jobs-hourly": {
-            "task": "app.tasks.scrape_jobs_task",
-            "schedule": 3600.0,  # Every hour
+        "process-job-emails": {
+            "task": "app.tasks.process_job_emails_task",
+            "schedule": 900.0,  # Every 15 minutes
         },
         "process-scheduled-communications": {
             "task": "app.tasks.process_scheduled_communications_task",
@@ -39,8 +39,8 @@ celery_app.conf.update(
             "task": "app.tasks.auto_apply_jobs_task",
             "schedule": 1800.0,  # Every 30 minutes
         },
-        "update-job-scores-daily": {
-            "task": "app.tasks.update_job_scores_task",
+        "cleanup-old-data": {
+            "task": "app.tasks.cleanup_old_data_task",
             "schedule": 86400.0,  # Daily
         },
     },
