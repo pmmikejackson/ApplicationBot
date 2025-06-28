@@ -153,7 +153,13 @@ export const Dashboard: React.FC = () => {
               <BarChart data={platformData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="platform" />
-                <YAxis tickFormatter={(value) => Math.round(value).toString()} />
+                <YAxis 
+                  tickFormatter={(value) => Math.round(value).toString()}
+                  domain={[0, 'dataMax']}
+                  tickCount={6}
+                  interval={0}
+                  ticks={[0, 5, 10, 15, 20, 25]}
+                />
                 <Tooltip formatter={(value) => [Math.round(Number(value)), 'Jobs']} />
                 <Bar dataKey="count" fill="#3B82F6" />
               </BarChart>
