@@ -22,6 +22,27 @@ npm install
 npm start                                     # Development server on port 3000
 ```
 
+### Email Parsing Configuration
+For email parsing to work, add these settings to your `.env` file:
+
+```bash
+# Email Parsing Settings
+EMAIL_PARSING_ENABLED=true
+IMAP_SERVER=imap.gmail.com                    # For Gmail users
+IMAP_USER=your-email@gmail.com
+IMAP_PASSWORD=your-app-specific-password      # Use app password for Gmail
+
+# Alternative email providers:
+# IMAP_SERVER=imap.outlook.com               # For Outlook/Hotmail
+# IMAP_SERVER=imap.yahoo.com                 # For Yahoo Mail
+```
+
+**Gmail App Password Setup:**
+1. Enable 2-factor authentication on your Google account
+2. Go to Google Account settings > Security > App passwords
+3. Generate app password for "Mail"
+4. Use this password (not your regular password) in IMAP_PASSWORD
+
 ### Docker Operations
 ```bash
 # Production deployment
@@ -79,6 +100,15 @@ celery -A app.core.celery beat --loglevel=info      # Start Celery scheduler
 - ✅ Fixed decimal displays in dashboard charts and statistics
 - ✅ Priority-based color coding and visual "Apply Now" buttons
 - ✅ Complete job-application status synchronization in backend
+
+**Email Parsing System Added**:
+- ✅ Email parser service for extracting jobs from platform emails
+- ✅ Support for LinkedIn, Indeed, and BuiltIn email formats
+- ✅ IMAP integration for reading email inbox
+- ✅ Pattern-based job information extraction (title, company, location, URL)
+- ✅ API endpoints for email parsing with configuration testing
+- ✅ Dashboard integration with "Parse Emails" button
+- ✅ Safer alternative to web scraping with real job alert emails
 
 ### Database Management
 ```bash

@@ -6,7 +6,7 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
-import { jobsApi, scrapersApi, JobStats } from '../services/api.ts';
+import { jobsApi, scrapersApi, emailParserApi, JobStats } from '../services/api.ts';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
@@ -16,6 +16,8 @@ export const Dashboard: React.FC = () => {
   const [scrapingStatus, setScrapingStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
+  const [parsingEmails, setParsingEmails] = useState(false);
+  const [emailConfig, setEmailConfig] = useState<any>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -24,12 +26,14 @@ export const Dashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [jobStats, scrapingData] = await Promise.all([
+      const [jobStats, scrapingData, emailConfigData] = await Promise.all([
         jobsApi.getJobStats(),
         scrapersApi.getScrapingStatus(),
+        emailParserApi.testEmailConfig().catch(() => ({ configured: false }))
       ]);
       setStats(jobStats);
       setScrapingStatus(scrapingData);
+      setEmailConfig(emailConfigData);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -52,6 +56,20 @@ export const Dashboard: React.FC = () => {
       console.error('Scraping failed:', error);
     } finally {
       setScraping(false);
+    }
+  };
+
+  const handleParseEmails = async () => {
+    try {
+      setParsingEmails(true);
+      const result = await emailParserApi.parseEmailsFromConfig(7);
+      console.log('Email parsing result:', result);
+      // Reload data after parsing
+      setTimeout(loadDashboardData, 2000);
+    } catch (error) {
+      console.error('Email parsing failed:', error);
+    } finally {
+      setParsingEmails(false);
     }
   };
 
@@ -116,14 +134,25 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-gray-600">Overview of your job application automation</p>
         </div>
-        <button
-          onClick={handleStartScraping}
-          disabled={scraping}
-          className="bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-        >
-          <ArrowPathIcon className={`h-4 w-4 ${scraping ? 'animate-spin' : ''}`} />
-          <span>{scraping ? 'Scraping...' : 'Start Job Search'}</span>
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleParseEmails}
+            disabled={parsingEmails || !emailConfig?.configured}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+            title={!emailConfig?.configured ? 'Email parsing not configured' : 'Parse job emails from inbox'}
+          >
+            <ArrowPathIcon className={`h-4 w-4 ${parsingEmails ? 'animate-spin' : ''}`} />
+            <span>{parsingEmails ? 'Parsing...' : 'Parse Emails'}</span>
+          </button>
+          <button
+            onClick={handleStartScraping}
+            disabled={scraping}
+            className="bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+          >
+            <ArrowPathIcon className={`h-4 w-4 ${scraping ? 'animate-spin' : ''}`} />
+            <span>{scraping ? 'Scraping...' : 'Start Job Search'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

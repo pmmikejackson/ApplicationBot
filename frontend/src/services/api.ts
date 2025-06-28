@@ -141,6 +141,28 @@ export const applicationsApi = {
   },
 };
 
+export const emailParserApi = {
+  parseEmails: async (data: {
+    days_back: number;
+    imap_server: string;
+    email_user: string;
+    email_password: string;
+  }) => {
+    const response = await api.post('/email-parser/parse-emails', data);
+    return response.data;
+  },
+
+  parseEmailsFromConfig: async (days_back: number = 7) => {
+    const response = await api.post(`/email-parser/parse-emails-from-config?days_back=${days_back}`);
+    return response.data;
+  },
+
+  testEmailConfig: async () => {
+    const response = await api.get('/email-parser/email-config-test');
+    return response.data;
+  },
+};
+
 export const communicationsApi = {
   getCommunications: async (params?: { job_id?: number; type?: string }) => {
     const response = await api.get('/communications/', { params });

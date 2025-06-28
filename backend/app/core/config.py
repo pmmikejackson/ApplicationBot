@@ -19,12 +19,18 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Email
+    # Email - SMTP (sending)
     SMTP_TLS: bool = True
     SMTP_PORT: Optional[int] = None
     SMTP_HOST: Optional[str] = None
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
+    
+    # Email - IMAP (receiving/parsing)
+    IMAP_SERVER: Optional[str] = None
+    IMAP_USER: Optional[str] = None
+    IMAP_PASSWORD: Optional[str] = None
+    EMAIL_PARSING_ENABLED: bool = False
     
     # OpenAI
     OPENAI_API_KEY: Optional[str] = None
