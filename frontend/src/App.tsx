@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard.tsx';
 import { Jobs } from './pages/Jobs.tsx';
 import { Applications } from './pages/Applications.tsx';
 import { Settings } from './pages/Settings.tsx';
+import { EmailSetup } from './pages/EmailSetup.tsx';
 import './index.css';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/jobs" element={<Jobs />} />
             <Route path="/applications" element={<Applications />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/email-setup" element={<EmailSetup />} />
           </Routes>
         </main>
       </div>

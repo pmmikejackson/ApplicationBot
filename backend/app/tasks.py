@@ -6,6 +6,7 @@ from app.services.scraper_service import ScraperService
 from app.services.communication_service import CommunicationService
 from app.services.job_matching_service import JobMatchingService
 from app.services.email_parser_service import EmailJobParserService
+from app.services.oauth_email_service import OAuth2EmailService
 from app.automation.application_automator import ApplicationAutomator
 from app.core.config import settings
 from app.models.job import Job, JobStatus, JobPriority
@@ -66,16 +67,65 @@ def scrape_jobs_task(self, user_id: int = None):
 
 @celery_app.task(bind=True)
 def process_job_emails_task(self):
-    """Background task to process job emails automatically"""
+    """Background task to process job emails automatically using OAuth2 or IMAP"""
     
-    if not settings.EMAIL_PARSING_ENABLED:
-        logger.info("Email parsing is disabled in settings")
-        return {"status": "disabled"}
+    import os
+    import json
     
-    if not all([settings.IMAP_SERVER, settings.IMAP_USER, settings.IMAP_PASSWORD]):
-        logger.error("Email configuration incomplete")
-        return {"status": "error", "message": "Email configuration incomplete"}
+    # Try OAuth2 first, fallback to IMAP
+    oauth_creds_path = "/app/oauth_credentials.json"
     
+    if os.path.exists(oauth_creds_path):
+        return process_emails_with_oauth(oauth_creds_path)
+    elif all([settings.IMAP_SERVER, settings.IMAP_USER, settings.IMAP_PASSWORD]) and settings.EMAIL_PARSING_ENABLED:
+        return process_emails_with_imap()
+    else:
+        logger.info("No email configuration found (OAuth2 or IMAP)")
+        return {"status": "not_configured", "message": "No email authentication configured"}
+
+def process_emails_with_oauth(oauth_creds_path: str):
+    """Process emails using OAuth2 authentication"""
+    try:
+        with open(oauth_creds_path, 'r') as f:
+            creds_data = json.load(f)
+        
+        oauth_service = OAuth2EmailService()
+        oauth_service.load_credentials(creds_data)
+        
+        # Test connection
+        test_result = oauth_service.test_connection()
+        if not test_result["success"]:
+            logger.error(f"OAuth2 connection failed: {test_result.get('error')}")
+            return {"status": "error", "message": f"OAuth2 connection failed: {test_result.get('error')}"}
+        
+        # Fetch and parse job emails (last 24 hours)
+        jobs = oauth_service.fetch_job_emails(days_back=1)
+        
+        if not jobs:
+            logger.info("No new job emails found via OAuth2")
+            return {"status": "success", "jobs_found": 0, "jobs_saved": 0, "method": "oauth2"}
+        
+        jobs_saved = save_jobs_to_mock_store(jobs, "oauth2")
+        
+        result = {
+            "status": "success",
+            "jobs_found": len(jobs),
+            "jobs_saved": jobs_saved,
+            "duplicates_skipped": len(jobs) - jobs_saved,
+            "processed_at": datetime.now().isoformat(),
+            "method": "oauth2",
+            "email": test_result.get("email")
+        }
+        
+        logger.info(f"OAuth2 email processing completed: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"OAuth2 email processing failed: {e}")
+        return {"status": "error", "message": str(e), "method": "oauth2"}
+
+def process_emails_with_imap():
+    """Process emails using IMAP authentication (legacy)"""
     try:
         parser = EmailJobParserService()
         
@@ -87,78 +137,84 @@ def process_job_emails_task(self):
         )
         
         if not connected:
-            logger.error("Failed to connect to email server")
-            return {"status": "error", "message": "Failed to connect to email server"}
+            logger.error("Failed to connect to email server via IMAP")
+            return {"status": "error", "message": "Failed to connect to email server via IMAP"}
         
         # Fetch and parse job emails (last 24 hours)
         jobs = parser.fetch_job_emails(days_back=1)
         parser.close_connection()
         
         if not jobs:
-            logger.info("No new job emails found")
-            return {"status": "success", "jobs_found": 0, "jobs_saved": 0}
+            logger.info("No new job emails found via IMAP")
+            return {"status": "success", "jobs_found": 0, "jobs_saved": 0, "method": "imap"}
         
-        # For now, just store in mock data (later integrate with database)
-        from app.main import mock_data_store
-        jobs_saved = 0
-        
-        for job_data in jobs:
-            try:
-                # Generate new ID
-                new_id = max(mock_data_store["jobs"].keys(), default=0) + 1
-                
-                # Convert to mock data format
-                mock_job = {
-                    "id": new_id,
-                    "title": job_data.get("title", "Unknown Position"),
-                    "company": job_data.get("company", "Unknown Company"),
-                    "location": job_data.get("location", "Location not specified"),
-                    "salary_min": job_data.get("salary_min"),
-                    "salary_max": job_data.get("salary_max"),
-                    "platform": job_data.get("platform", "email").value if hasattr(job_data.get("platform"), 'value') else str(job_data.get("platform", "email")).lower(),
-                    "status": "discovered",
-                    "priority": job_data.get("priority", "good_fit").value if hasattr(job_data.get("priority"), 'value') else str(job_data.get("priority", "good_fit")).lower(),
-                    "fit_score": job_data.get("fit_score", 7.0),
-                    "posted_date": job_data.get("posted_date", datetime.now()).isoformat() if hasattr(job_data.get("posted_date"), 'isoformat') else str(job_data.get("posted_date", datetime.now())),
-                    "discovered_at": datetime.now().isoformat(),
-                    "is_remote": job_data.get("is_remote", False),
-                    "application_url": job_data.get("application_url", ""),
-                    "source": "email"
-                }
-                
-                # Check for duplicates by title and company
-                duplicate = False
-                for existing_job in mock_data_store["jobs"].values():
-                    if (existing_job["title"].lower() == mock_job["title"].lower() and 
-                        existing_job["company"].lower() == mock_job["company"].lower()):
-                        duplicate = True
-                        break
-                
-                if not duplicate:
-                    mock_data_store["jobs"][new_id] = mock_job
-                    jobs_saved += 1
-                    logger.info(f"Saved job from email: {mock_job['title']} at {mock_job['company']}")
-                else:
-                    logger.info(f"Skipped duplicate job: {mock_job['title']} at {mock_job['company']}")
-                    
-            except Exception as e:
-                logger.error(f"Failed to process job email: {e}")
-                continue
+        jobs_saved = save_jobs_to_mock_store(jobs, "imap")
         
         result = {
             "status": "success",
             "jobs_found": len(jobs),
             "jobs_saved": jobs_saved,
             "duplicates_skipped": len(jobs) - jobs_saved,
-            "processed_at": datetime.now().isoformat()
+            "processed_at": datetime.now().isoformat(),
+            "method": "imap"
         }
         
-        logger.info(f"Email processing completed: {result}")
+        logger.info(f"IMAP email processing completed: {result}")
         return result
         
     except Exception as e:
-        logger.error(f"Email processing task failed: {e}")
-        return {"status": "error", "message": str(e)}
+        logger.error(f"IMAP email processing failed: {e}")
+        return {"status": "error", "message": str(e), "method": "imap"}
+
+def save_jobs_to_mock_store(jobs, source_method):
+    """Save parsed jobs to mock data store"""
+    from app.main import mock_data_store
+    jobs_saved = 0
+    
+    for job_data in jobs:
+        try:
+            # Generate new ID
+            new_id = max(mock_data_store["jobs"].keys(), default=0) + 1
+            
+            # Convert to mock data format
+            mock_job = {
+                "id": new_id,
+                "title": job_data.get("title", "Unknown Position"),
+                "company": job_data.get("company", "Unknown Company"),
+                "location": job_data.get("location", "Location not specified"),
+                "salary_min": job_data.get("salary_min"),
+                "salary_max": job_data.get("salary_max"),
+                "platform": job_data.get("platform", "email").value if hasattr(job_data.get("platform"), 'value') else str(job_data.get("platform", "email")).lower(),
+                "status": "discovered",
+                "priority": job_data.get("priority", "good_fit").value if hasattr(job_data.get("priority"), 'value') else str(job_data.get("priority", "good_fit")).lower(),
+                "fit_score": job_data.get("fit_score", 7.0),
+                "posted_date": job_data.get("posted_date", datetime.now()).isoformat() if hasattr(job_data.get("posted_date"), 'isoformat') else str(job_data.get("posted_date", datetime.now())),
+                "discovered_at": datetime.now().isoformat(),
+                "is_remote": job_data.get("is_remote", False),
+                "application_url": job_data.get("application_url", ""),
+                "source": source_method
+            }
+            
+            # Check for duplicates by title and company
+            duplicate = False
+            for existing_job in mock_data_store["jobs"].values():
+                if (existing_job["title"].lower() == mock_job["title"].lower() and 
+                    existing_job["company"].lower() == mock_job["company"].lower()):
+                    duplicate = True
+                    break
+            
+            if not duplicate:
+                mock_data_store["jobs"][new_id] = mock_job
+                jobs_saved += 1
+                logger.info(f"Saved job from {source_method}: {mock_job['title']} at {mock_job['company']}")
+            else:
+                logger.info(f"Skipped duplicate job: {mock_job['title']} at {mock_job['company']}")
+                
+        except Exception as e:
+            logger.error(f"Failed to process job email: {e}")
+            continue
+    
+    return jobs_saved
 
 @celery_app.task(bind=True)
 def update_job_scores_task(self, user_id: int):

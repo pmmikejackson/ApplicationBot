@@ -7,6 +7,7 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { jobsApi, scrapersApi, emailParserApi, JobStats } from '../services/api.ts';
+import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
@@ -27,7 +28,11 @@ export const Dashboard: React.FC = () => {
       const [jobStats, scrapingData, emailConfigData] = await Promise.all([
         jobsApi.getJobStats(),
         scrapersApi.getScrapingStatus(),
-        emailParserApi.testEmailConfig().catch(() => ({ configured: false, last_check: null }))
+        // Try OAuth status first, fallback to IMAP config
+        fetch('http://192.168.1.79:8000/api/v1/oauth/oauth-status')
+          .then(res => res.json())
+          .catch(() => emailParserApi.testEmailConfig())
+          .catch(() => ({ configured: false, last_check: null }))
       ]);
       setStats(jobStats);
       setScrapingStatus(scrapingData);
@@ -106,12 +111,22 @@ export const Dashboard: React.FC = () => {
             Email Processing: {emailStatus?.configured ? (
               <span className="text-green-600 font-medium">Active</span>
             ) : (
-              <span className="text-amber-600 font-medium">Setup Required</span>
+              <Link 
+                to="/email-setup" 
+                className="text-amber-600 font-medium hover:text-amber-700 underline"
+              >
+                Setup Required
+              </Link>
             )}
           </div>
           {emailStatus?.last_check && (
             <div className="text-xs text-gray-400">
               Last checked: {new Date(emailStatus.last_check).toLocaleTimeString()}
+            </div>
+          )}
+          {!emailStatus?.configured && (
+            <div className="text-xs text-gray-400">
+              Click to configure OAuth2 authentication
             </div>
           )}
         </div>
