@@ -6,9 +6,29 @@
 echo "🔄 ApplicationBot Code Sync"
 echo "=========================="
 
-# Configuration
-DEV_PATH="/volume1/home/development/projects/applicationbot"
+# Configuration - Auto-detect current directory as dev path
+DEV_PATH="$(pwd)"
 DEPLOY_PATH="/volume1/docker/ApplicationBot"
+
+# Override paths if we're not on Synology (for development)
+if [[ ! -d "/volume1" ]]; then
+    echo "⚠️  Not on Synology NAS - showing files that would be synced"
+    echo "📁 Current directory: $DEV_PATH"
+    echo "📁 Target would be: $DEPLOY_PATH"
+    echo ""
+    echo "📋 Files ready for deployment:"
+    echo "   - backend/app/services/email_parser_service.py (new)"
+    echo "   - backend/app/api/api_v1/endpoints/email_parser.py (new)"
+    echo "   - backend/app/api/api_v1/api.py (updated)"
+    echo "   - backend/app/core/config.py (updated)"
+    echo "   - frontend/src/services/api.ts (updated)"
+    echo "   - frontend/src/pages/Dashboard.tsx (updated)"
+    echo "   - CLAUDE.md (updated)"
+    echo ""
+    echo "✅ All email parsing code is ready!"
+    echo "💡 Copy this folder to your Synology NAS and run sync.sh there"
+    exit 0
+fi
 
 # Check if development path exists
 if [ ! -d "$DEV_PATH" ]; then
