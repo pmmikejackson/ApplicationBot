@@ -91,7 +91,17 @@ celery -A app.core.celery worker --loglevel=info    # Start Celery worker
 celery -A app.core.celery beat --loglevel=info      # Start Celery scheduler
 ```
 
-### Recent Updates (2025-06-28)
+### Recent Updates (2025-06-29)
+**OAuth2 Email Authentication Complete**:
+- ✅ OAuth2LocalServerService replacing deprecated OOB flow
+- ✅ Local HTTP server on localhost:8080 for redirect handling
+- ✅ Automatic authorization code capture (no manual copy/paste)
+- ✅ Real-time polling for authorization completion status
+- ✅ Updated EmailSetup.tsx with improved UX and automated flow
+- ✅ Fixes Google's "OOB flow has been blocked" error
+- ✅ Production-ready OAuth2 integration for Google Workspace
+
+**Previous Updates (2025-06-28)**:
 **Workflow Implementation Completed**:
 - ✅ Two-column Jobs page layout ("Jobs Available" vs "Jobs Applied For")
 - ✅ Kanban-style Applications page with drag-and-drop functionality
@@ -104,7 +114,7 @@ celery -A app.core.celery beat --loglevel=info      # Start Celery scheduler
 **Email Parsing System Added**:
 - ✅ Email parser service for extracting jobs from platform emails
 - ✅ Support for LinkedIn, Indeed, and BuiltIn email formats
-- ✅ IMAP integration for reading email inbox
+- ✅ IMAP integration for reading email inbox (deprecated in favor of OAuth2)
 - ✅ Pattern-based job information extraction (title, company, location, URL)
 - ✅ API endpoints for email parsing with configuration testing
 - ✅ Safer alternative to web scraping with real job alert emails
@@ -115,7 +125,6 @@ celery -A app.core.celery beat --loglevel=info      # Start Celery scheduler
 - ✅ Email processing status indicator on dashboard
 - ✅ Duplicate job detection and filtering
 - ✅ Integration with existing mock data store
-- ✅ Comprehensive EMAIL_SETUP_GUIDE.md documentation
 - ✅ Production-ready for dogfooding and future monetization
 
 ### Database Management

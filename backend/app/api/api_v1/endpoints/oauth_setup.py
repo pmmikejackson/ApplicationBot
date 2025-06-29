@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from app.services.oauth_email_service import OAuth2EmailService
+from app.services.oauth_local_server import OAuth2LocalServerService
 from app.core.config import settings
 import os
 import json
@@ -15,7 +15,7 @@ router = APIRouter()
 oauth_flows = {}
 
 class OAuthStartRequest(BaseModel):
-    redirect_uri: str = "urn:ietf:wg:oauth:2.0:oob"
+    port: int = 8080
 
 class OAuthCompleteRequest(BaseModel):
     authorization_code: str
@@ -31,7 +31,7 @@ class OAuthStatusResponse(BaseModel):
 @router.post("/start-oauth-flow")
 async def start_oauth_flow(
     credentials_file: UploadFile = File(...),
-    redirect_uri: str = Form("urn:ietf:wg:oauth:2.0:oob")
+    port: int = Form(8080)
 ):
     """
     Start OAuth2 flow by uploading Google credentials file
@@ -61,11 +61,11 @@ async def start_oauth_flow(
         with open(temp_creds_path, 'w') as f:
             f.write(content.decode('utf-8'))
         
-        # Initialize OAuth service
-        oauth_service = OAuth2EmailService()
+        # Initialize OAuth service with local server
+        oauth_service = OAuth2LocalServerService()
         
-        # Start OAuth flow
-        auth_url = oauth_service.setup_oauth_flow(temp_creds_path, redirect_uri)
+        # Start OAuth flow with local server
+        auth_url = oauth_service.setup_oauth_flow_with_server(temp_creds_path, port)
         
         # Store flow for completion (use UUID in production)
         flow_id = "main_flow"
@@ -78,12 +78,13 @@ async def start_oauth_flow(
             "success": True,
             "authorization_url": auth_url,
             "flow_id": flow_id,
+            "port": port,
             "instructions": [
                 "1. Click the authorization URL",
                 "2. Sign in with mike@mikejacksonpm.com", 
                 "3. Grant permissions for Gmail access",
-                "4. Copy the authorization code",
-                "5. Complete setup with the code"
+                "4. Authorization will complete automatically",
+                "5. Return to this page to see completion status"
             ]
         }
         
@@ -109,8 +110,8 @@ async def complete_oauth_flow(request: OAuthCompleteRequest):
         
         oauth_service = oauth_flows[request.flow_id]
         
-        # Complete OAuth flow
-        creds_data = oauth_service.complete_oauth_flow(request.authorization_code)
+        # Complete OAuth flow with authorization code
+        creds_data = oauth_service.complete_oauth_flow_with_code(request.authorization_code)
         
         # Store credentials securely (in production, encrypt and store in database)
         creds_file_path = "/app/oauth_credentials.json"
@@ -170,7 +171,7 @@ async def get_oauth_status():
         with open(creds_file_path, 'r') as f:
             creds_data = json.load(f)
         
-        oauth_service = OAuth2EmailService()
+        oauth_service = OAuth2LocalServerService()
         oauth_service.load_credentials(creds_data)
         test_result = oauth_service.test_connection()
         
@@ -207,6 +208,53 @@ async def get_oauth_status():
             ]
         )
 
+@router.get("/check-authorization-status/{flow_id}")
+async def check_authorization_status(flow_id: str):
+    """
+    Check if user has completed OAuth2 authorization
+    """
+    try:
+        if flow_id not in oauth_flows:
+            raise HTTPException(
+                status_code=400,
+                detail="OAuth flow not found or expired"
+            )
+        
+        oauth_service = oauth_flows[flow_id]
+        status = oauth_service.check_authorization_status()
+        
+        if status['status'] == 'completed':
+            # Store credentials and clean up
+            creds_data = status['credentials']
+            creds_file_path = "/app/oauth_credentials.json"
+            os.makedirs(os.path.dirname(creds_file_path), exist_ok=True)
+            
+            with open(creds_file_path, 'w') as f:
+                json.dump(creds_data, f, indent=2)
+            
+            # Test the connection
+            test_result = oauth_service.test_connection()
+            
+            # Clean up flow
+            del oauth_flows[flow_id]
+            
+            return {
+                "status": "completed",
+                "success": True,
+                "message": "OAuth2 setup completed successfully",
+                "email": test_result.get("email"),
+                "connection_test": test_result
+            }
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error checking authorization status: {e}")
+        return {
+            "status": "error",
+            "message": f"Error checking authorization status: {str(e)}"
+        }
+
 @router.post("/test-oauth-connection")
 async def test_oauth_connection():
     """
@@ -224,7 +272,7 @@ async def test_oauth_connection():
         with open(creds_file_path, 'r') as f:
             creds_data = json.load(f)
         
-        oauth_service = OAuth2EmailService()
+        oauth_service = OAuth2LocalServerService()
         oauth_service.load_credentials(creds_data)
         
         # Test connection and fetch recent emails

@@ -1,7 +1,12 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.api_v1.api import api_router
+from app.core.config import settings
 import logging
 import time
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(
@@ -10,7 +15,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="ApplicationBot API")
+# Create FastAPI application
+app = FastAPI(
+    title="ApplicationBot",
+    description="Automated job application system with OAuth2 email integration",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # In-memory storage for mock data persistence
 mock_data_store = {
@@ -29,7 +41,9 @@ mock_data_store = {
             "posted_date": "2025-06-28T10:00:00Z",
             "discovered_at": "2025-06-28T15:00:00Z",
             "is_remote": True,
-            "application_url": "https://example.com/job1"
+            "is_hybrid": False,
+            "application_url": "https://example.com/job1",
+            "source": "manual"
         },
         2: {
             "id": 2,
@@ -45,7 +59,27 @@ mock_data_store = {
             "posted_date": "2025-06-27T14:00:00Z",
             "discovered_at": "2025-06-28T14:30:00Z",
             "is_remote": False,
-            "application_url": "https://example.com/job2"
+            "is_hybrid": True,
+            "application_url": "https://example.com/job2",
+            "source": "manual"
+        },
+        3: {
+            "id": 3,
+            "title": "VP of Product Management",
+            "company": "Enterprise Solutions Inc",
+            "location": "New York, NY",
+            "salary_min": 250000,
+            "salary_max": 300000,
+            "platform": "builtin",
+            "status": "discovered",
+            "priority": "stretch",
+            "fit_score": 7.8,
+            "posted_date": "2025-06-26T09:00:00Z",
+            "discovered_at": "2025-06-28T12:45:00Z",
+            "is_remote": False,
+            "is_hybrid": False,
+            "application_url": "https://builtin.com/jobs/54321",
+            "source": "manual"
         }
     },
     "applications": {
@@ -56,6 +90,7 @@ mock_data_store = {
             "method": "automated",
             "submitted_at": "2025-06-28T14:00:00Z",
             "created_at": "2025-06-28T14:00:00Z",
+            "error_message": None
         },
         2: {
             "id": 2,
@@ -64,10 +99,12 @@ mock_data_store = {
             "method": "manual",
             "submitted_at": None,
             "created_at": "2025-06-28T13:30:00Z",
+            "error_message": None
         }
     }
 }
 
+# Request/response logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
@@ -77,56 +114,51 @@ async def log_requests(request: Request, call_next):
     logger.info(f"Response: {response.status_code} - {process_time:.4f}s")
     return response
 
-# CORS - Allow all origins
+# CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # In production, specify exact origins
     allow_credentials=False,  # Set to False when using allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Include all API routes (OAuth2, email-parser, jobs, applications, etc.)
+app.include_router(api_router, prefix="/api/v1")
+
+# Root endpoint
 @app.get("/")
 async def root():
-    return {"message": "ApplicationBot API is running"}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
-@app.get("/api/v1/scrapers/status")
-async def scrapers_status():
-    """Get dynamic scraper status based on current data"""
-    jobs = list(mock_data_store["jobs"].values())
-    
-    # Calculate real stats
-    total_jobs = len(jobs)
-    jobs_discovered_today = total_jobs  # For demo, assume all jobs were discovered today
-    
-    # Platform breakdown
-    platform_breakdown = {}
-    for job in jobs:
-        platform = job["platform"]
-        platform_breakdown[platform] = platform_breakdown.get(platform, 0) + 1
-    
-    # Status breakdown
-    status_breakdown = {}
-    for job in jobs:
-        status = job["status"]
-        status_breakdown[status] = status_breakdown.get(status, 0) + 1
-    
     return {
-        "total_jobs": total_jobs,
-        "jobs_discovered_today": jobs_discovered_today,
-        "platform_breakdown": platform_breakdown,
-        "status_breakdown": status_breakdown,
-        "last_scrape": "2025-06-28T15:30:00Z",
-        "active_scrapers": 0
+        "message": "ApplicationBot API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+        "features": [
+            "Job discovery and management",
+            "Application tracking with Kanban workflow", 
+            "OAuth2 email parsing integration",
+            "Automated background processing",
+            "RESTful API with OpenAPI documentation"
+        ]
     }
 
-from pydantic import BaseModel
-from typing import List, Optional
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+        "services": {
+            "api": "running",
+            "mock_data": "available",
+            "oauth": "configured" if settings.EMAIL_PARSING_ENABLED else "not_configured"
+        }
+    }
 
+# Legacy endpoints for backward compatibility (these will be handled by the API router now)
 class ScrapeRequest(BaseModel):
     keywords: List[str]
     location: str
@@ -135,215 +167,64 @@ class ScrapeRequest(BaseModel):
     senior_level: bool = True
     salary_min: Optional[int] = None
 
-@app.post("/api/v1/scrapers/scrape")
-async def start_scraping_post(request: ScrapeRequest):
-    """Start job scraping with test data"""
-    return await start_scraping_logic(request)
+# Mock data access functions used by API endpoints
+def get_mock_jobs():
+    """Get all jobs from mock data store"""
+    return list(mock_data_store["jobs"].values())
 
-@app.get("/api/v1/scrapers/scrape") 
-async def start_scraping_get():
-    """Start job scraping with test data"""
-    return await start_scraping_logic()
+def get_mock_job(job_id: int):
+    """Get specific job from mock data store"""
+    return mock_data_store["jobs"].get(job_id)
 
-async def start_scraping_logic(request: ScrapeRequest = None):
-    """Start job scraping with test data"""
-    if request:
-        logger.info(f"Starting job scraping simulation with: {request.keywords} in {request.location}")
-    else:
-        logger.info("Starting job scraping simulation...")
-    
-    # Simulate scraping results
-    mock_results = {
-        "total_jobs_found": 25,
-        "total_jobs_saved": 20,
-        "platform_results": {
-            "linkedin": {"found": 8, "saved": 7},
-            "indeed": {"found": 10, "saved": 8},
-            "builtin": {"found": 4, "saved": 3},
-            "ziprecruiter": {"found": 3, "saved": 2}
-        },
-        "errors": []
-    }
-    
-    logger.info(f"Scraping completed: {mock_results}")
-    return mock_results
+def update_mock_job(job_id: int, updates: Dict[str, Any]):
+    """Update job in mock data store"""
+    if job_id in mock_data_store["jobs"]:
+        mock_data_store["jobs"][job_id].update(updates)
+        return mock_data_store["jobs"][job_id]
+    return None
 
-@app.get("/api/v1/jobs/")
-async def get_jobs(status: str = "", platform: str = "", priority: str = ""):
-    """Get jobs list with persistent mock data - handles query parameters"""
-    logger.info(f"Getting jobs with filters: status={status}, platform={platform}, priority={priority}")
-    
-    jobs = list(mock_data_store["jobs"].values())
-    
-    # Apply filters if provided
-    if status:
-        jobs = [job for job in jobs if job["status"] == status]
-    if platform:
-        jobs = [job for job in jobs if job["platform"] == platform]
-    if priority:
-        jobs = [job for job in jobs if job["priority"] == priority]
-    
-    return jobs
+def get_mock_applications():
+    """Get all applications from mock data store"""
+    return list(mock_data_store["applications"].values())
 
-@app.put("/api/v1/jobs/{job_id}")
-async def update_job(job_id: int, job_update: dict):
-    """Update a specific job with persistence and sync applications"""
-    logger.info(f"Updating job {job_id} with data: {job_update}")
-    
-    if job_id not in mock_data_store["jobs"]:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Update the job in our persistent store
-    job = mock_data_store["jobs"][job_id]
-    job.update(job_update)
-    
-    # Sync application status based on job status
-    if "status" in job_update:
-        job_status = job_update["status"]
-        
-        # Check if application exists for this job
-        existing_app = None
-        for app_id, app in mock_data_store["applications"].items():
-            if app["job_id"] == job_id:
-                existing_app = app
-                break
-        
-        if job_status == "applied" and not existing_app:
-            # Create new application when job is marked as applied
-            new_app_id = max(mock_data_store["applications"].keys(), default=0) + 1
-            new_application = {
-                "id": new_app_id,
-                "job_id": job_id,
-                "status": "submitted",
-                "method": "automated",
-                "submitted_at": "2025-06-28T15:30:00Z",
-                "created_at": "2025-06-28T15:30:00Z"
-            }
-            mock_data_store["applications"][new_app_id] = new_application
-            logger.info(f"Created new application {new_app_id} for job {job_id}")
-        
-        elif existing_app:
-            # Update existing application status
-            if job_status == "applied":
-                existing_app["status"] = "submitted"
-                if not existing_app.get("submitted_at"):
-                    existing_app["submitted_at"] = "2025-06-28T15:30:00Z"
-            elif job_status == "under_review":
-                existing_app["status"] = "under_review"
-            elif job_status == "interview_scheduled":
-                existing_app["status"] = "interview_scheduled"
-            elif job_status == "rejected":
-                existing_app["status"] = "rejected"
-            elif job_status == "discovered":
-                existing_app["status"] = "pending"
-    
-    return job
+def get_mock_application(app_id: int):
+    """Get specific application from mock data store"""
+    return mock_data_store["applications"].get(app_id)
 
-@app.get("/api/v1/jobs/{job_id}")
-async def get_job(job_id: int):
-    """Get a specific job by ID with persistence"""
-    logger.info(f"Getting job {job_id}")
-    
-    if job_id not in mock_data_store["jobs"]:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    return mock_data_store["jobs"][job_id]
+def update_mock_application(app_id: int, updates: Dict[str, Any]):
+    """Update application in mock data store"""
+    if app_id in mock_data_store["applications"]:
+        mock_data_store["applications"][app_id].update(updates)
+        return mock_data_store["applications"][app_id]
+    return None
 
-@app.get("/api/v1/applications/")
-async def get_applications():
-    """Get applications list with persistent data"""
-    logger.info("Getting applications list")
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Application startup tasks"""
+    logger.info("ApplicationBot API starting up...")
+    logger.info(f"Mock data initialized with {len(mock_data_store['jobs'])} jobs and {len(mock_data_store['applications'])} applications")
     
-    applications = []
-    for app in mock_data_store["applications"].values():
-        # Add job details to each application
-        app_with_job = app.copy()
-        if app["job_id"] in mock_data_store["jobs"]:
-            job = mock_data_store["jobs"][app["job_id"]]
-            app_with_job["job"] = {
-                "id": job["id"],
-                "title": job["title"],
-                "company": job["company"],
-                "location": job["location"]
-            }
-        applications.append(app_with_job)
+    # Check OAuth2 configuration
+    try:
+        import os
+        if os.path.exists("/app/oauth_credentials.json"):
+            logger.info("OAuth2 credentials found - email processing available")
+        elif all([settings.IMAP_SERVER, settings.IMAP_USER, settings.IMAP_PASSWORD]) and settings.EMAIL_PARSING_ENABLED:
+            logger.info("IMAP credentials configured - email processing available")
+        else:
+            logger.info("No email authentication configured - manual job entry only")
+    except Exception as e:
+        logger.warning(f"Error checking email configuration: {e}")
     
-    return applications
+    logger.info("ApplicationBot API startup complete")
 
-@app.put("/api/v1/applications/{application_id}")
-async def update_application(application_id: int, update_data: dict):
-    """Update an application status with persistence"""
-    logger.info(f"Updating application {application_id} with data: {update_data}")
-    
-    if application_id not in mock_data_store["applications"]:
-        raise HTTPException(status_code=404, detail="Application not found")
-    
-    # Update the application in our persistent store
-    app = mock_data_store["applications"][application_id]
-    app.update(update_data)
-    
-    # Add submitted_at timestamp if status changed to submitted
-    if update_data.get("status") == "submitted" and not app.get("submitted_at"):
-        app["submitted_at"] = "2025-06-28T15:30:00Z"
-    
-    # Return with job details
-    app_with_job = app.copy()
-    if app["job_id"] in mock_data_store["jobs"]:
-        job = mock_data_store["jobs"][app["job_id"]]
-        app_with_job["job"] = {
-            "id": job["id"],
-            "title": job["title"],
-            "company": job["company"],
-            "location": job["location"]
-        }
-    
-    return app_with_job
+# Shutdown event  
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown tasks"""
+    logger.info("ApplicationBot API shutting down...")
 
-@app.post("/api/v1/applications/{application_id}/follow-up")
-async def send_follow_up(application_id: int):
-    """Send follow-up email for an application"""
-    logger.info(f"Sending follow-up email for application {application_id}")
-    
-    # In a real implementation, this would send an actual email
-    return {
-        "success": True,
-        "message": "Follow-up email sent successfully",
-        "sent_at": "2025-06-28T15:30:00Z"
-    }
-
-@app.get("/api/v1/jobs/stats/summary")
-async def jobs_stats():
-    """Get dynamic job statistics based on current data"""
-    jobs = list(mock_data_store["jobs"].values())
-    
-    # Calculate real stats
-    total_jobs = len(jobs)
-    applied_jobs = len([j for j in jobs if j["status"] == "applied"])
-    high_priority_jobs = len([j for j in jobs if j["priority"] == "must_apply"])
-    
-    # Platform breakdown
-    platform_breakdown = {}
-    for job in jobs:
-        platform = job["platform"]
-        platform_breakdown[platform] = platform_breakdown.get(platform, 0) + 1
-    
-    # Status breakdown
-    status_breakdown = {}
-    for job in jobs:
-        status = job["status"]
-        status_breakdown[status] = status_breakdown.get(status, 0) + 1
-    
-    # Priority breakdown
-    priority_breakdown = {}
-    for job in jobs:
-        priority = job["priority"]
-        priority_breakdown[priority] = priority_breakdown.get(priority, 0) + 1
-    
-    return {
-        "total_jobs": total_jobs,
-        "applied_jobs": applied_jobs,
-        "high_priority_jobs": high_priority_jobs,
-        "platform_breakdown": platform_breakdown,
-        "status_breakdown": status_breakdown,
-        "priority_breakdown": priority_breakdown
-    }
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

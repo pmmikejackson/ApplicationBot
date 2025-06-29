@@ -20,16 +20,24 @@ export const EmailSetup: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [authUrl, setAuthUrl] = useState<string>('');
   const [flowId, setFlowId] = useState<string>('');
-  const [authCode, setAuthCode] = useState<string>('');
-  const [step, setStep] = useState<'check' | 'upload' | 'authorize' | 'complete'>('check');
+  const [authPort, setAuthPort] = useState<number>(8080);
+  const [step, setStep] = useState<'check' | 'upload' | 'authorize' | 'waiting' | 'complete'>('check');
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkOAuthStatus();
+    
+    // Cleanup polling interval on unmount
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   const checkOAuthStatus = async () => {
     try {
-      const response = await fetch('http://192.168.1.79:8000/api/v1/oauth/oauth-status');
+      const response = await fetch('http://192.168.1.79:8001/api/v1/oauth/oauth-status');
       const data = await response.json();
       setOauthStatus(data);
       
@@ -53,9 +61,9 @@ export const EmailSetup: React.FC = () => {
       setUploading(true);
       const formData = new FormData();
       formData.append('credentials_file', file);
-      formData.append('redirect_uri', 'urn:ietf:wg:oauth:2.0:oob');
+      formData.append('port', '8080');
 
-      const response = await fetch('http://192.168.1.79:8000/api/v1/oauth/start-oauth-flow', {
+      const response = await fetch('http://192.168.1.79:8001/api/v1/oauth/start-oauth-flow', {
         method: 'POST',
         body: formData,
       });
@@ -65,6 +73,7 @@ export const EmailSetup: React.FC = () => {
       if (data.success) {
         setAuthUrl(data.authorization_url);
         setFlowId(data.flow_id);
+        setAuthPort(data.port || 8080);
         setStep('authorize');
       } else {
         alert('Failed to start OAuth flow: ' + (data.detail || 'Unknown error'));
@@ -77,40 +86,50 @@ export const EmailSetup: React.FC = () => {
     }
   };
 
-  const completeOAuthFlow = async () => {
-    if (!authCode.trim()) {
-      alert('Please enter the authorization code');
-      return;
-    }
-
-    try {
-      setUploading(true);
-      const response = await fetch('http://192.168.1.79:8000/api/v1/oauth/complete-oauth-flow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          authorization_code: authCode,
-          flow_id: flowId,
-        }),
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setStep('complete');
-        checkOAuthStatus(); // Refresh status
-        alert('OAuth2 setup completed successfully!');
-      } else {
-        alert('Failed to complete OAuth flow: ' + (data.detail || 'Unknown error'));
+  const startAuthorizationPolling = () => {
+    setStep('waiting');
+    setUploading(true);
+    
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`http://192.168.1.79:8001/api/v1/oauth/check-authorization-status/${flowId}`);
+        const data = await response.json();
+        
+        if (data.status === 'completed') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setStep('complete');
+          setUploading(false);
+          checkOAuthStatus();
+        } else if (data.status === 'error' || data.status === 'timeout') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setUploading(false);
+          alert(`Authorization failed: ${data.message}`);
+          setStep('upload');
+        }
+      } catch (error) {
+        console.error('Error checking authorization status:', error);
       }
-    } catch (error) {
-      console.error('OAuth completion failed:', error);
-      alert('OAuth completion failed: ' + error);
-    } finally {
-      setUploading(false);
-    }
+    }, 3000); // Poll every 3 seconds
+    
+    setPollInterval(interval);
+    
+    // Stop polling after 5 minutes
+    setTimeout(() => {
+      if (interval) {
+        clearInterval(interval);
+        setPollInterval(null);
+        setUploading(false);
+        alert('Authorization timeout. Please try again.');
+        setStep('upload');
+      }
+    }, 300000);
+  };
+  
+  const openAuthorizationUrl = () => {
+    window.open(authUrl, '_blank');
+    startAuthorizationPolling();
   };
 
   if (loading) {
@@ -158,9 +177,9 @@ export const EmailSetup: React.FC = () => {
               <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
                 <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
                 <li>Create or select a project (e.g., "ApplicationBot")</li>
-                <li>Enable the Gmail API in APIs & Services > Library</li>
-                <li>Go to APIs & Services > Credentials</li>
-                <li>Click "+ CREATE CREDENTIALS" > "OAuth client ID"</li>
+                <li>Enable the Gmail API in APIs &amp; Services &gt; Library</li>
+                <li>Go to APIs &amp; Services &gt; Credentials</li>
+                <li>Click "+ CREATE CREDENTIALS" &gt; "OAuth client ID"</li>
                 <li>Select "Desktop application"</li>
                 <li>Download the JSON file</li>
               </ol>
@@ -205,44 +224,50 @@ export const EmailSetup: React.FC = () => {
           
           <div className="space-y-4">
             <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium text-green-900 mb-2">Authorization URL generated!</h3>
+              <h3 className="font-medium text-green-900 mb-2">Ready to authorize!</h3>
               <p className="text-sm text-green-800 mb-3">
-                Click the link below to authorize ApplicationBot to access your Gmail:
+                Click the button below to open Google's authorization page in a new tab. 
+                Authorization will complete automatically - no need to copy/paste codes.
               </p>
-              <a
-                href={authUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              <p className="text-xs text-green-700 mb-3">
+                Local server running on port {authPort} will handle the authorization response.
+              </p>
+              <button
+                onClick={openAuthorizationUrl}
+                disabled={uploading}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
               >
-                Authorize Gmail Access
-              </a>
+                {uploading && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
+                <span>Authorize Gmail Access</span>
+              </button>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Authorization Code
-              </label>
-              <input
-                type="text"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value)}
-                placeholder="Paste the authorization code here"
-                className="w-full border border-gray-300 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                After clicking "Authorize Gmail Access", copy the code and paste it here
+          </div>
+        </div>
+      )}
+      
+      {step === 'waiting' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium mb-4">Waiting for Authorization...</h2>
+          
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="flex items-center">
+                <ArrowPathIcon className="h-6 w-6 animate-spin text-blue-600 mr-3" />
+                <div>
+                  <h3 className="font-medium text-blue-900">Please complete authorization in the opened tab</h3>
+                  <p className="text-sm text-blue-800 mt-1">
+                    After granting permissions, this page will automatically complete the setup.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                If the authorization tab didn't open, you can 
+                <a href={authUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">click here</a>
               </p>
             </div>
-
-            <button
-              onClick={completeOAuthFlow}
-              disabled={uploading || !authCode.trim()}
-              className="bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-            >
-              {uploading && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
-              <span>Complete Setup</span>
-            </button>
           </div>
         </div>
       )}
