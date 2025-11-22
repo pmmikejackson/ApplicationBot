@@ -52,6 +52,12 @@ struct ContentView: View {
                     Label("Review", systemImage: "calendar")
                 }
                 .tag(4)
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gear")
+                }
+                .tag(5)
         }
     }
 }

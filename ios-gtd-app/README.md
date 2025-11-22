@@ -178,20 +178,23 @@ If you already have the files in a working directory:
 ### Daily Workflow
 
 **Morning**:
-1. Open Daily Review
+1. Say "Hey Siri, start daily review" or open the app
 2. Review completed items from yesterday
 3. Look at today's next actions
-4. Choose what to focus on
+4. Check calendar for scheduled items
+5. Choose what to focus on
 
 **Throughout the Day**:
-1. Capture new items in Brain Dump as they come up
-2. Complete next actions
+1. Use Siri for quick capture: "Hey Siri, add to GTD inbox [task]"
+2. Complete next actions as you work
 3. Process inbox when you have a few minutes
+4. Scheduled items sync to calendar
 
 **Evening**:
 1. Do a quick Daily Review
 2. Mark completed items
-3. Note mood and thoughts
+3. Check "Hey Siri, check my GTD inbox"
+4. Note mood and thoughts
 
 ### Weekly Workflow
 
@@ -300,19 +303,27 @@ All data is stored locally using SwiftData:
 - Ensure modelContext.save() is called
 - Check for try/catch blocks around save operations
 
+## Implemented Features ✅
+
+- ✅ Calendar integration for scheduled items (EventKit)
+- ✅ Siri shortcuts for voice capture
+- ✅ Interactive workflow diagram
+- ✅ Do/Defer/Delegate decision tree
+
 ## Future Enhancements
 
 Potential features to add:
-- [ ] Calendar integration for scheduled items
 - [ ] Notifications for due items
 - [ ] Search functionality
 - [ ] Tags in addition to contexts
 - [ ] Archive completed items
-- [ ] Export data
+- [ ] Export/import data
 - [ ] Widgets for quick capture
 - [ ] Watch app for quick add
-- [ ] Siri integration
 - [ ] Share extension for capturing from other apps
+- [ ] Reminders app integration
+- [ ] Recurring tasks
+- [ ] Attachments and files
 
 ## Resources
 

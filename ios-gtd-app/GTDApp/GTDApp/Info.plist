@@ -22,6 +22,21 @@
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+
+    <!-- Calendar Permissions -->
+    <key>NSCalendarsUsageDescription</key>
+    <string>GTD needs calendar access to sync your scheduled tasks and help you manage time-specific commitments.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>GTD needs full calendar access to create and update events for your scheduled tasks.</string>
+
+    <!-- Reminders (optional for future) -->
+    <key>NSRemindersUsageDescription</key>
+    <string>GTD can sync with Reminders to help you stay organized.</string>
+
+    <!-- Siri Integration -->
+    <key>NSSiriUsageDescription</key>
+    <string>GTD uses Siri to let you quickly capture tasks and check your inbox using voice commands.</string>
+
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
