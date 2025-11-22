@@ -24,6 +24,7 @@ struct ProcessItemView: View {
     @State private var isSingleAction = true
     @State private var canDoInTwoMinutes = false
     @State private var shouldDelegate = false
+    @State private var showingWorkflowDiagram = false
 
     private let steps = [
         "What is it?",
@@ -125,6 +126,17 @@ struct ProcessItemView: View {
                         dismiss()
                     }
                 }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingWorkflowDiagram = true
+                    } label: {
+                        Label("Workflow", systemImage: "map")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingWorkflowDiagram) {
+                GTDWorkflowDiagramView()
             }
         }
     }
@@ -151,12 +163,26 @@ struct ProcessItemView: View {
 
     private var actionableStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Is action required?")
-                .font(.headline)
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Is action required?")
+                        .font(.headline)
 
-            Text("Can you do something about this right now?")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                    Text("Can you do something about this right now?")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    showingWorkflowDiagram = true
+                } label: {
+                    Image(systemName: "map")
+                        .font(.title3)
+                        .foregroundStyle(.blue)
+                }
+            }
 
             VStack(spacing: 12) {
                 Button {
@@ -215,14 +241,35 @@ struct ProcessItemView: View {
 
     private var classifyStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Classify the action")
-                .font(.headline)
+            HStack {
+                Text("Classify the action")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    showingWorkflowDiagram = true
+                } label: {
+                    Label("View Decision Tree", systemImage: "map")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
 
             // Two minute rule
             VStack(alignment: .leading, spacing: 12) {
-                Text("Can you do this in 2 minutes or less?")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack {
+                    Image(systemName: "clock.fill")
+                        .foregroundStyle(.orange)
+                    Text("Can you do this in 2 minutes or less?")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+
+                Text("The 2-Minute Rule: If it's quicker to do than to organize, do it now!")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
 
                 HStack(spacing: 12) {
                     Button {
@@ -275,6 +322,65 @@ struct ProcessItemView: View {
             }
 
             Divider()
+
+            // Delegate decision
+            if !canDoInTwoMinutes {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "person.2.fill")
+                            .foregroundStyle(.orange)
+                        Text("Should you delegate this?")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+
+                    Text("Can someone else do this task? Delegation frees you for higher-value work.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+
+                    HStack(spacing: 12) {
+                        Button {
+                            shouldDelegate = true
+                        } label: {
+                            Text("Yes - Delegate")
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(shouldDelegate ? Color.orange : Color(.systemGray6))
+                                .foregroundStyle(shouldDelegate ? .white : .primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+
+                        Button {
+                            shouldDelegate = false
+                        } label: {
+                            Text("No - I'll do it")
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(!shouldDelegate ? Color.blue : Color(.systemGray6))
+                                .foregroundStyle(!shouldDelegate ? .white : .primary)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+
+                if shouldDelegate {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("This will be added to your Waiting For list", systemImage: "clock.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+
+                        Text("Remember to add who you're waiting for in the notes!")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
+                Divider()
+            }
 
             // Priority
             VStack(alignment: .leading, spacing: 12) {

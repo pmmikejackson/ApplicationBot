@@ -16,6 +16,7 @@ struct InboxView: View {
     @State private var showingBrainDump = false
     @State private var showingProcessing = false
     @State private var selectedItem: GTDItem?
+    @State private var showingWorkflowGuide = false
 
     var body: some View {
         NavigationStack {
@@ -46,6 +47,14 @@ struct InboxView: View {
                         }
                     }
                 }
+
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showingWorkflowGuide = true
+                    } label: {
+                        Label("Workflow Guide", systemImage: "map")
+                    }
+                }
             }
             .sheet(isPresented: $showingBrainDump) {
                 BrainDumpView()
@@ -61,6 +70,9 @@ struct InboxView: View {
                         showingProcessing = false
                     }
                 }
+            }
+            .sheet(isPresented: $showingWorkflowGuide) {
+                GTDWorkflowDiagramView()
             }
         }
     }
