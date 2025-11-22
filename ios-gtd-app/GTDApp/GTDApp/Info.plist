@@ -37,6 +37,24 @@
     <key>NSSiriUsageDescription</key>
     <string>GTD uses Siri to let you quickly capture tasks and check your inbox using voice commands.</string>
 
+    <!-- Face ID / Touch ID -->
+    <key>NSFaceIDUsageDescription</key>
+    <string>Use Face ID to securely access your GTD data.</string>
+
+    <!-- CloudKit / iCloud -->
+    <key>NSUbiquitousContainers</key>
+    <dict>
+        <key>iCloud.com.gtdapp.GTDApp</key>
+        <dict>
+            <key>NSUbiquitousContainerIsDocumentScopePublic</key>
+            <true/>
+            <key>NSUbiquitousContainerName</key>
+            <string>GTD</string>
+            <key>NSUbiquitousContainerSupportedFolderLevels</key>
+            <string>Any</string>
+        </dict>
+    </dict>
+
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

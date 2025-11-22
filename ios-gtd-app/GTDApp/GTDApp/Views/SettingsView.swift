@@ -13,6 +13,21 @@ struct SettingsView: View {
             List {
                 Section {
                     NavigationLink {
+                        AccountView()
+                    } label: {
+                        SettingRow(
+                            icon: "person.circle.fill",
+                            title: "Account",
+                            subtitle: "Profile & sync settings",
+                            color: .blue
+                        )
+                    }
+                } header: {
+                    Text("Account")
+                }
+
+                Section {
+                    NavigationLink {
                         CalendarIntegrationView()
                     } label: {
                         SettingRow(
